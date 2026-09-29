@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dice Crash Prototype</title>
+<style>
+:root{
+  --bg:#070b16; --bg2:#0e1426; --panel:#111a30; --line:#24304f; --text:#e8ecf7; --muted:#8a96b5;
+  --gold:#ffd24a; --teal:#2dd4bf; --green:#34d399; --red:#f43f5e; --purple:#a78bfa; --blue:#60a5fa;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:radial-gradient(ellipse at top,#16203d 0%,var(--bg) 60%);color:var(--text);
+  font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;min-height:100%}
+button{font-family:inherit}
+.app{max-width:1280px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.logo{font-weight:900;letter-spacing:.06em;font-size:22px}
+.logo span{color:var(--red);text-shadow:0 0 12px rgba(244,63,94,.6)}
+.logo small{display:block;font-weight:500;letter-spacing:0;color:var(--muted);font-size:12px}
+.balance{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 14px;font-size:14px;color:var(--muted)}
+.balance b{color:var(--gold);font-size:18px;margin-left:6px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+@media (max-width:1000px){.layout{grid-template-columns:1fr}}
+
+/* ---------- board ---------- */
+.board-wrap{display:flex;justify-content:center}
+.board{position:relative;width:min(100%,800px);aspect-ratio:1;border-radius:18px;
+  background:linear-gradient(145deg,#0d1530,#0a1022);border:2px solid #1f2b4d;
+  box-shadow:0 0 0 6px #0b1124, 0 20px 60px rgba(0,0,0,.6), inset 0 0 60px rgba(96,165,250,.06)}
+.board.shake{animation:shake .5s}
+@keyframes shake{0%,100%{transform:translate(0)}20%{transform:translate(-8px,4px)}40%{transform:translate(7px,-5px)}60%{transform:translate(-5px,3px)}80%{transform:translate(4px,-2px)}}
+.tile{position:absolute;padding:2px;cursor:pointer}
+.tin{position:relative;width:100%;height:100%;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;font-size:calc(var(--tp,60px)*.15);line-height:1.05;
+  border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 -6px 12px rgba(0,0,0,.35);transition:transform .2s, box-shadow .2s}
+.tile:hover .tin{transform:scale(1.06);z-index:2}
+.tile.sel .tin{outline:2px solid #fff;outline-offset:1px}
+.idx{position:absolute;top:3px;left:5px;font-size:calc(var(--tp,60px)*.11);color:rgba(255,255,255,.45);font-weight:600;z-index:3;pointer-events:none}
+.lbl{font-weight:800;letter-spacing:.04em;font-size:.82em;z-index:1}
+.val{font-weight:900;font-size:1.55em;z-index:1}
+.val.sm{font-size:1.1em}
+.sub{font-size:.7em;opacity:.75;z-index:1}
+.ico{width:48%;height:auto;z-index:1;margin-bottom:2px}
+
+.t-GO .tin{background:linear-gradient(145deg,#1d8a45,#0f5028);color:#fff5c2}
+.t-GO .val{color:var(--gold);text-shadow:0 0 10px rgba(255,210,74,.6)}
+.t-MULT .tin{background:linear-gradient(160deg,#0f4c4d,#0a2c33);color:#b7fff4}
+.t-MULT .val{color:var(--teal);text-shadow:0 0 8px rgba(45,212,191,.5)}
+.t-PROPERTY .tin{background:linear-gradient(180deg,#1b2440,#131a31);justify-content:flex-end;padding-bottom:10%}
+.strip{position:absolute;top:0;left:0;right:0;height:30%;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.owned-flag{position:absolute;right:4px;top:34%;width:28%;display:none;z-index:2}
+.tile.owned .owned-flag{display:block}
+.t-CASHOUT .tin{background:linear-gradient(160deg,#0f6b40,#07361f);color:#bbf7d0;box-shadow:inset 0 0 18px rgba(52,211,153,.35)}
+.t-TAX .tin{background:linear-gradient(160deg,#3a3f4a,#1f232b);color:#e5e7eb}
+.bars{position:absolute;inset:0;background:
+  linear-gradient(#6b7280,#6b7280) top/100% 8% no-repeat,
+  linear-gradient(#6b7280,#6b7280) bottom/100% 8% no-repeat,
+  repeating-linear-gradient(90deg,transparent 0 13%,#9ca3af 13% 19%,#4b5563 19% 21%);opacity:.5}
+.tile.jailed .bars{animation:bars .7s cubic-bezier(.3,1.5,.5,1)}
+@keyframes bars{0%{transform:translateY(-100%);opacity:.9}100%{transform:translateY(0);opacity:.5}}
+.t-PORTAL .tin{background:radial-gradient(circle,#0a2a12 0%,#030a05 75%);color:#c6ff9e}
+.vortex{width:66%;aspect-ratio:1;z-index:1;margin-bottom:2px;
+  border-radius:47% 53% 50% 50%/52% 48% 52% 48%;
+  background:radial-gradient(circle,#f4ffd6 0 10%,rgba(200,255,120,.6) 18%,transparent 45%),
+    repeating-conic-gradient(from 0deg,#3ddc4a 0 14deg,#b3ff4d 14deg 26deg,#119a2c 26deg 40deg,#7dff3a 40deg 52deg);
+  box-shadow:0 0 12px 3px rgba(124,255,79,.8), inset 0 0 12px rgba(240,255,190,.9);
+  animation:spin 2.6s linear infinite, wobble 3s ease-in-out infinite}
+@keyframes spin{to{rotate:360deg}}
+@keyframes wobble{50%{border-radius:53% 47% 45% 55%/46% 55% 45% 54%;scale:1.06}}
+.tile.warp .vortex{animation:spin .4s linear infinite;scale:1.35;box-shadow:0 0 28px 10px rgba(124,255,79,.95)}
+.t-CHANCE .tin{background:linear-gradient(160deg,#4c1d95,#2a0f57);color:#ede9fe}
+.q{font-size:2.3em;font-weight:900;color:#e9d5ff;text-shadow:0 0 12px #a855f7;z-index:1;animation:qpulse 2s ease-in-out infinite}
+@keyframes qpulse{50%{transform:scale(1.12) rotate(-6deg)}}
+.t-TWO_DICE .tin{background:linear-gradient(160deg,#1e3a8a,#111f4f);color:#dbeafe}
+.t-BUST .tin{background:radial-gradient(circle at 50% 40%,#6b0f1f,#2a060c 75%);color:#ffd1d9;box-shadow:inset 0 0 16px rgba(244,63,94,.45)}
+.spark{animation:spark .35s steps(2) infinite}
+@keyframes spark{50%{opacity:.3;transform:scale(.6)}}
+.t-JACKPOT .tin{background:linear-gradient(135deg,#8a5a00,#ffcf33 45%,#a86b00 55%,#ffe27a);background-size:250% 250%;
+  color:#3b2600;animation:shimmer 3s linear infinite;box-shadow:0 0 18px rgba(255,210,74,.7)}
+@keyframes shimmer{to{background-position:250% 0}}
+
+.tile.reach .tin{box-shadow:0 0 0 2px rgba(255,255,255,.75),0 0 14px rgba(255,255,255,.35)}
+.tile.reach.danger .tin{box-shadow:0 0 0 2px var(--red),0 0 16px rgba(244,63,94,.8)}
+.tile.reach.goal .tin{box-shadow:0 0 0 2px var(--gold),0 0 18px rgba(255,210,74,.9)}
+.prob{position:absolute;bottom:2px;right:3px;font-size:calc(var(--tp,60px)*.12);font-weight:800;background:rgba(0,0,0,.65);
+  padding:0 3px;border-radius:4px;z-index:4;pointer-events:none}
+
+/* token */
+.token{position:absolute;width:calc(var(--tpct)*.42);aspect-ratio:1;border-radius:50%;transform:translate(-50%,-50%);z-index:20;
+  background:radial-gradient(circle at 35% 30%,#fff7c9,#ffd24a 40%,#c48a00 80%);border:2px solid #fff3b0;
+  box-shadow:0 0 16px rgba(255,210,74,.9),0 4px 8px rgba(0,0,0,.6);transition:left .13s ease-out, top .13s ease-out;pointer-events:none}
+.token.hop{animation:hop .13s ease-out}
+@keyframes hop{50%{transform:translate(-50%,-80%) scale(1.1)}}
+.token.warp-out{animation:warpout .45s forwards}
+.token.warp-in{animation:warpin .45s forwards}
+@keyframes warpout{to{transform:translate(-50%,-50%) scale(0) rotate(540deg);opacity:0}}
+@keyframes warpin{from{transform:translate(-50%,-50%) scale(0) rotate(-540deg);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
+
+/* center */
+.center{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(4px,1.2vw,12px);
+  padding:clamp(6px,2vw,24px);text-align:center;border-radius:12px;
+  background:radial-gradient(ellipse at center,rgba(96,165,250,.07),transparent 70%)}
+.brand{font-weight:900;letter-spacing:.2em;font-size:clamp(12px,2vw,20px);color:var(--muted)}
+.brand span{color:var(--red)}
+.multi{font-weight:900;font-size:clamp(34px,8vw,84px);color:#fff;text-shadow:0 0 30px rgba(96,165,250,.5);line-height:1;transition:color .2s}
+.multi.pop{animation:pop .35s}
+.multi.down{color:#fca5a5}
+@keyframes pop{40%{transform:scale(1.18);color:var(--gold)}}
+.potential{color:var(--muted);font-size:clamp(11px,1.6vw,15px)}
+.potential b{color:var(--green)}
+.dice-row{display:flex;gap:18px;min-height:clamp(40px,7vw,64px);align-items:center}
+.die-wrap{perspective:600px;--ds:clamp(36px,6.5vw,58px)}
+.die{width:var(--ds);height:var(--ds);position:relative;transform-style:preserve-3d;transition:transform 1s cubic-bezier(.15,.85,.25,1)}
+.face{position:absolute;inset:0;border-radius:18%;background:linear-gradient(145deg,#ffffff,#dfe3ee);display:grid;
+  grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:14%;box-shadow:inset 0 0 8px rgba(0,0,0,.25);backface-visibility:hidden}
+.pip{width:72%;height:72%;border-radius:50%;background:radial-gradient(circle at 35% 35%,#555,#0b0b0b);place-self:center}
+.face.red .pip{background:radial-gradient(circle at 35% 35%,#ff7a8a,#b3001e)}
+.status{font-size:clamp(12px,1.7vw,16px);min-height:1.4em;font-weight:600}
+.status.good{color:var(--green)} .status.bad{color:var(--red)} .status.warn{color:var(--gold)}
+.risk{display:grid;grid-template-columns:auto 1fr auto;gap:4px 8px;width:min(100%,340px);font-size:clamp(10px,1.4vw,13px);align-items:center;color:var(--muted)}
+.bar{height:7px;background:#1b2542;border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;border-radius:4px;transition:width .3s}
+.controls{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;justify-content:center}
+.bet{display:flex;align-items:center;background:#0b1224;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.bet button{background:none;border:0;color:var(--text);width:30px;font-size:18px;cursor:pointer;height:100%}
+.bet input{width:64px;background:none;border:0;color:var(--gold);font-weight:800;text-align:center;font-size:16px}
+.btn{border:0;border-radius:10px;padding:12px 22px;font-weight:900;letter-spacing:.06em;font-size:clamp(13px,1.8vw,16px);cursor:pointer;transition:transform .1s, filter .2s}
+.btn:active{transform:scale(.96)}
+.btn:disabled{filter:grayscale(1) brightness(.5);cursor:not-allowed}
+.roll{background:linear-gradient(180deg,#60a5fa,#2563eb);color:#fff;box-shadow:0 6px 18px rgba(37,99,235,.5)}
+.cash{background:linear-gradient(180deg,#4ade80,#16a34a);color:#052e16;box-shadow:0 6px 18px rgba(22,163,74,.45)}
+.cash.ready{animation:ready 1s ease-in-out infinite}
+@keyframes ready{50%{box-shadow:0 0 0 6px rgba(74,222,128,.35),0 6px 18px rgba(22,163,74,.6)}}
+.hint{font-size:11px;color:var(--muted)}
+
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:12px;
+  background:rgba(5,8,18,.82);opacity:0;pointer-events:none;transition:opacity .25s;z-index:30;gap:8px}
+.overlay.show{opacity:1;pointer-events:auto}
+.overlay h2{margin:0;font-size:clamp(34px,7vw,72px);font-weight:900;letter-spacing:.05em}
+.overlay p{margin:0;font-size:clamp(14px,2vw,20px);color:var(--muted)}
+.overlay.bust h2{color:var(--red);text-shadow:0 0 30px rgba(244,63,94,.8)}
+.overlay.win h2{color:var(--green);text-shadow:0 0 30px rgba(52,211,153,.7)}
+.overlay.jack h2{color:var(--gold);text-shadow:0 0 30px rgba(255,210,74,.9)}
+.card{width:clamp(110px,18vw,170px);aspect-ratio:.7;border-radius:12px;background:linear-gradient(160deg,#6d28d9,#3b0764);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px solid #c4b5fd;box-shadow:0 0 30px rgba(167,139,250,.7);
+  animation:flip .6s ease-out}
+.card b{font-size:clamp(28px,5vw,46px);color:#fff}
+.card span{color:#ddd6fe;font-size:13px}
+@keyframes flip{from{transform:rotateY(90deg) scale(.6)}to{transform:rotateY(0) scale(1)}}
+
+.float{position:absolute;z-index:40;font-weight:900;font-size:clamp(12px,2vw,20px);pointer-events:none;transform:translate(-50%,-50%);
+  animation:floatup 1.1s ease-out forwards;text-shadow:0 2px 6px rgba(0,0,0,.8);white-space:nowrap}
+@keyframes floatup{to{transform:translate(-50%,-220%);opacity:0}}
+.particle{position:absolute;z-index:35;width:9px;height:9px;border-radius:2px;pointer-events:none;animation:fly var(--dur,.9s) cubic-bezier(.1,.7,.3,1) forwards}
+@keyframes fly{to{transform:translate(var(--dx),var(--dy)) rotate(var(--rot));opacity:0}}
+.flash{position:absolute;inset:0;border-radius:18px;pointer-events:none;z-index:25;animation:flash .6s forwards}
+@keyframes flash{from{opacity:.55}to{opacity:0}}
+
+/* side panel */
+.panel{display:flex;flex-direction:column;gap:12px}
+.card-p{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.card-p h3{margin:0 0 8px;font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.history{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12px;font-weight:800;padding:3px 8px;border-radius:999px;background:#1b2542}
+.chip.w{color:var(--green)} .chip.l{color:var(--red)} .chip.j{color:var(--gold)}
+.log{max-height:150px;overflow:auto;font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+.log div b{color:var(--text)}
+label.f{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;margin:6px 0}
+.f input,.f select,textarea{background:#0b1224;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 8px;font-family:inherit;font-size:13px}
+.f input,.f select{width:140px}
+textarea{width:100%;min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:11.5px;resize:vertical}
+.row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.sbtn{background:#1f2b4d;border:1px solid #2f3f6b;color:var(--text);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer}
+.sbtn:hover{background:#2a3a66}
+.sbtn.danger{border-color:#7f1d1d;background:#3b1016}
+.err{color:var(--red);font-size:12px;min-height:1em;margin-top:4px}
+.res{font-size:12.5px;line-height:1.6;margin-top:6px}
+.res b{color:var(--gold)}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">DICE <span>CRASH</span><small>Board prototype · click any tile to edit it</small></div>
+    <div class="balance">Balance<b id="balance">$1,000.00</b></div>
+  </header>
+
+  <div class="layout">
+    <div class="board-wrap">
+      <div class="board" id="board">
+        <div class="center" id="center">
+          <div class="brand">DICE <span>CRASH</span></div>
+          <div class="multi" id="multi">1.00x</div>
+          <div class="potential">Potential win <b id="pot">$0.00</b></div>
+          <div class="dice-row" id="diceRow"></div>
+          <div class="status" id="status">Set your bet and press START</div>
+          <div class="risk" id="risk">
+            <span>Bust</span><div class="bar"><i id="rBust" style="background:var(--red)"></i></div><b id="rBustT">0%</b>
+            <span>Jackpot</span><div class="bar"><i id="rJack" style="background:var(--gold)"></i></div><b id="rJackT">0%</b>
+            <span>Cash-out tile</span><div class="bar"><i id="rCash" style="background:var(--green)"></i></div><b id="rCashT">0%</b>
+          </div>
+          <div class="controls">
+            <div class="bet"><button id="betDown" aria-label="Lower bet">−</button><input id="bet" type="number" min="1" value="10"><button id="betUp" aria-label="Raise bet">+</button></div>
+            <button class="btn roll" id="rollBtn">START</button>
+            <button class="btn cash" id="cashBtn" disabled>CASH OUT</button>
+          </div>
+          <div class="hint">Space = roll · C = cash out</div>
+          <div class="overlay" id="overlay"></div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel">
+      <div class="card-p">
+        <h3>Round history</h3>
+        <div class="history" id="history"><span class="hint">No rounds yet</span></div>
+      </div>
+
+      <div class="card-p" id="inspector">
+        <h3>Tile inspector</h3>
+        <div id="inspBody" class="hint">Click a tile on the board to edit, insert or delete it.</div>
+      </div>
+
+      <div class="card-p">
+        <h3>Quick RTP check</h3>
+        <label class="f">Rounds <input id="simRounds" type="number" value="100000" min="1000" step="1000"></label>
+        <label class="f">Strategy
+          <select id="simStrat">
+            <option value="never">Never cash out</option>
+            <option value="first">First cash-out tile</option>
+            <option value="target">Cash out at ≥ target</option>
+            <option value="all">Compare all</option>
+          </select></label>
+        <label class="f">Target multiplier <input id="simTarget" type="number" value="10" step="0.5"></label>
+        <div class="row"><button class="sbtn" id="simBtn">Run simulation</button></div>
+        <div class="res" id="simRes"></div>
+      </div>
+
+      <div class="card-p">
+        <h3>Layout &amp; settings (JSON)</h3>
+        <textarea id="json" spellcheck="false"></textarea>
+        <div class="err" id="jsonErr"></div>
+        <div class="row">
+          <button class="sbtn" id="applyJson">Apply</button>
+          <button class="sbtn" id="resetJson">Reset default</button>
+          <button class="sbtn" id="copyPy">Copy as Python</button>
+        </div>
+      </div>
+
+      <div class="card-p">
+        <h3>Legend</h3>
+        <div class="legend">
+          <span><i style="background:#1d8a45"></i>GO (lap bonus)</span>
+          <span><i style="background:#0f4c4d"></i>Multiplier</span>
+          <span><i style="background:#e0569a"></i>Property set</span>
+          <span><i style="background:#0f6b40"></i>Cash out</span>
+          <span><i style="background:#4b5563"></i>Jail tax</span>
+          <span><i style="background:#3ddc4a"></i>Portal</span>
+          <span><i style="background:#6d28d9"></i>Chance</span>
+          <span><i style="background:#1e3a8a"></i>Two dice</span>
+          <span><i style="background:#6b0f1f"></i>Bust</span>
+          <span><i style="background:#ffcf33"></i>Jackpot</span>
+        </div>
+      </div>
+
+      <div class="card-p">
+        <h3>Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   CONFIG - edit here, or live in the JSON box on the page.
+   Tile types: GO, MULT{value}, PROPERTY{set,value}, CASHOUT, TAX{value},
+               PORTAL{target}, CHANCE, TWO_DICE, BUST, JACKPOT{value}
+   The board lays itself out for any number of tiles (8+).
+   ===================================================================== */
+const DEFAULT_CONFIG = {
+  lapBonus: 2.0,
+  setBonus: { A: 3.0, B: 5.0 },
+  chanceDeck: [[2.0, 1], [1.5, 1], [1.0, 1], [0.5, 1]],
+  maxWin: 10000,
+  tiles: [
+    {type:"GO"},                          // 0
+    {type:"MULT", value:1.2},             // 1
+    {type:"MULT", value:1.1},             // 2
+    {type:"MULT", value:1.5},             // 3
+    {type:"PROPERTY", set:"A", value:1.2},// 4
+    {type:"BUST"},                        // 5
+    {type:"CASHOUT"},                     // 6
+    {type:"MULT", value:1.1},             // 7
+    {type:"MULT", value:1.3},             // 8
+    {type:"TAX", value:0.8},              // 9
+    {type:"BUST"},                        // 10
+    {type:"CHANCE"},                      // 11
+    {type:"PROPERTY", set:"A", value:1.2},// 12
+    {type:"BUST"},                        // 13
+    {type:"PORTAL", target:30},           // 14
+    {type:"BUST"},                        // 15
+    {type:"MULT", value:1.5},             // 16
+    {type:"CASHOUT"},                     // 17
+    {type:"BUST"},                        // 18
+    {type:"TWO_DICE"},                    // 19
+    {type:"MULT", value:1.1},             // 20
+    {type:"MULT", value:1.3},             // 21
+    {type:"BUST"},                        // 22
+    {type:"PROPERTY", set:"B", value:1.3},// 23
+    {type:"BUST"},                        // 24
+    {type:"TAX", value:0.7},              // 25
+    {type:"CASHOUT"},                     // 26
+    {type:"BUST"},                        // 27
+    {type:"MULT", value:2.0},             // 28
+    {type:"BUST"},                        // 29
+    {type:"PORTAL", target:14},           // 30
+    {type:"PROPERTY", set:"B", value:1.3},// 31
+    {type:"BUST"},                        // 32
+    {type:"MULT", value:1.5},             // 33
+    {type:"BUST"},                        // 34
+    {type:"CASHOUT"},                     // 35
+    {type:"BUST"},                        // 36
+    {type:"BUST"},                        // 37
+    {type:"MULT", value:1.2},             // 38
+    {type:"JACKPOT", value:25}            // 39
+  ]
+};
+
+const TYPES = ["GO","MULT","PROPERTY","CASHOUT","TAX","PORTAL","CHANCE","TWO_DICE","BUST","JACKPOT"];
+const TYPE_FIELDS = {MULT:["value"], PROPERTY:["set","value"], TAX:["value"], PORTAL:["target"], JACKPOT:["value"]};
+const TYPE_DEFAULTS = {MULT:{value:1.2}, PROPERTY:{set:"A",value:1.2}, TAX:{value:0.8}, PORTAL:{target:0}, JACKPOT:{value:25}};
+const SET_COLORS = ["#e0569a","#f28c28","#3fa9f5","#d6c629","#9b5de5","#00bb88","#ef4444","#8d6e63"];
+
+let CFG, BOARD, N, SET_TILES = {};
+
+/* =====================================================================
+   ENGINE - pure game rules (shared by the animated game and simulator)
+   ===================================================================== */
+const d6 = () => 1 + Math.floor(Math.random() * 6);
+
+function newRound() {
+  return {pos:0, mult:1, owned:new Set(), twoDice:false, rolls:0, over:false, outcome:null};
+}
+
+function pickChance() {
+  const total = CFG.chanceDeck.reduce((s, c) => s + c[1], 0);
+  let r = Math.random() * total;
+  for (const [v, w] of CFG.chanceDeck) { if ((r -= w) < 0) return v; }
+  return CFG.chanceDeck[CFG.chanceDeck.length - 1][0];
+}
+
+// Applies one roll of `steps` to the round state; returns a list of events.
+function engineStep(st, steps) {
+  const ev = [];
+  st.rolls++;
+  st.twoDice = false;
+  let np = st.pos + steps;
+  if (np >= N) { st.mult *= CFG.lapBonus; ev.push({t:"lap", factor:CFG.lapBonus}); np %= N; }
+  st.pos = np;
+  let tile = BOARD[np], kind = tile.type;
+  if (kind === "PORTAL") {
+    const to = clampIdx(tile.target);
+    ev.push({t:"portal", from:np, to});
+    st.pos = to; tile = BOARD[to]; kind = tile.type === "PORTAL" ? "NONE" : tile.type;
+  }
+  const pos = st.pos;
+  switch (kind) {
+    case "BUST": st.over = true; st.outcome = "bust"; ev.push({t:"bust", pos}); break;
+    case "JACKPOT":
+      st.mult *= tile.value; st.over = true; st.outcome = "jackpot";
+      ev.push({t:"jackpot", pos, factor:tile.value}); break;
+    case "MULT": st.mult *= tile.value; ev.push({t:"mult", pos, factor:tile.value}); break;
+    case "TAX": st.mult *= tile.value; ev.push({t:"tax", pos, factor:tile.value}); break;
+    case "PROPERTY": {
+      st.mult *= tile.value; ev.push({t:"prop", pos, factor:tile.value});
+      if (!st.owned.has(pos)) {
+        st.owned.add(pos);
+        const need = SET_TILES[tile.set] || [];
+        if (need.every(i => st.owned.has(i))) {
+          const b = CFG.setBonus[tile.set] || 1;
+          st.mult *= b; ev.push({t:"set", set:tile.set, factor:b});
+        }
+      }
+      break;
+    }
+    case "CHANCE": { const f = pickChance(); st.mult *= f; ev.push({t:"chance", pos, factor:f}); break; }
+    case "TWO_DICE": st.twoDice = true; ev.push({t:"twodice", pos}); break;
+    case "CASHOUT": ev.push({t:"cashoutAvail", pos}); break;
+  }
+  if (!st.over && st.mult >= CFG.maxWin) { st.mult = CFG.maxWin; st.over = true; st.outcome = "maxwin"; ev.push({t:"maxwin"}); }
+  return ev;
+}
+
+function clampIdx(i) { i = Math.round(Number(i) || 0); return ((i % N) + N) % N; }
+
+// Probability of each outcome for the next roll from `pos`.
+function nextRollOdds(pos, two) {
+  const dist = two
+    ? Array.from({length:11}, (_, k) => [k + 2, (6 - Math.abs(k + 2 - 7)) / 36])
+    : Array.from({length:6}, (_, k) => [k + 1, 1 / 6]);
+  const reach = {}; let bust = 0, jack = 0, cash = 0;
+  for (const [s, p] of dist) {
+    const land = (pos + s) % N;
+    let t = BOARD[land], kind = t.type;
+    if (kind === "PORTAL") { const t2 = BOARD[clampIdx(t.target)]; kind = t2.type === "PORTAL" ? "NONE" : t2.type; }
+    if (kind === "BUST") bust += p;
+    if (kind === "JACKPOT") jack += p;
+    if (kind === "CASHOUT") cash += p;
+    reach[land] = reach[land] || {p:0, kind};
+    reach[land].p += p;
+  }
+  return {bust, jack, cash, reach};
+}
+
+function simulate(rounds, strat, target) {
+  let total = 0, bust = 0, jack = 0, cash = 0, rolls = 0, paid = 0, maxP = 0;
+  for (let r = 0; r < rounds; r++) {
+    const st = newRound();
+    while (!st.over && st.rolls < 1000) {
+      const steps = st.twoDice ? d6() + d6() : d6();
+      engineStep(st, steps);
+      if (!st.over && BOARD[st.pos].type === "CASHOUT" &&
+          (strat === "first" || (strat === "target" && st.mult >= target))) {
+        st.over = true; st.outcome = "cashout";
+      }
+    }
+    const pay = st.outcome === "bust" ? 0 : Math.min(st.mult, CFG.maxWin);
+    total += pay; rolls += st.rolls; if (pay > 0) paid++; if (pay > maxP) maxP = pay;
+    if (st.outcome === "bust") bust++; else if (st.outcome === "jackpot") jack++; else if (st.outcome === "cashout") cash++;
+  }
+  return {rtp: total / rounds, bust: bust / rounds, jack: jack / rounds, cash: cash / rounds,
+          rolls: rolls / rounds, paid: paid / rounds, maxP};
+}
+
+/* =====================================================================
+   RENDERING
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const boardEl = $("board");
+let tileEls = [], tokenEl, tilePct = 10;
+
+const ICONS = {
+  go: `<svg class="ico" viewBox="0 0 40 20"><path d="M38 10H8M14 3 6 10l8 7" stroke="#ffd24a" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  vault: `<svg class="ico" viewBox="0 0 40 40"><rect x="4" y="6" width="32" height="28" rx="4" fill="#0b3d24" stroke="#86efac" stroke-width="2.5"/><circle cx="20" cy="20" r="8" fill="none" stroke="#bbf7d0" stroke-width="2.5"/><path d="M20 12v16M12 20h16" stroke="#bbf7d0" stroke-width="2"/><circle cx="20" cy="20" r="2.5" fill="#ffd24a"/><rect x="8" y="34" width="5" height="3" fill="#86efac"/><rect x="27" y="34" width="5" height="3" fill="#86efac"/></svg>`,
+  bomb: `<svg class="ico" viewBox="0 0 40 40"><circle cx="18" cy="24" r="12" fill="#0d0d0d" stroke="#ff4d6d" stroke-width="1.2"/><rect x="21" y="9" width="7" height="6" rx="1" fill="#3a3a3a" transform="rotate(35 24 12)"/><path d="M27 9q4-7 9-3" stroke="#d6a36b" stroke-width="2" fill="none"/><g class="spark" style="transform-origin:36px 6px"><circle cx="36" cy="6" r="3.2" fill="#ffcc00"/><circle cx="36" cy="6" r="1.5" fill="#fff"/></g><circle cx="13" cy="19" r="3" fill="#fff" opacity=".3"/></svg>`,
+  crown: `<svg class="ico" viewBox="0 0 40 30"><path d="M4 26 2 6l10 8 8-12 8 12 10-8-2 20Z" fill="#fff3b0" stroke="#5a3a00" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="20" r="2.5" fill="#e11d48"/><circle cx="20" cy="18" r="3" fill="#2563eb"/><circle cx="28" cy="20" r="2.5" fill="#16a34a"/></svg>`,
+  dice2: `<svg class="ico" viewBox="0 0 44 30"><g transform="rotate(-12 12 15)"><rect x="2" y="4" width="20" height="20" rx="4" fill="#fff"/><circle cx="7" cy="9" r="2" fill="#111"/><circle cx="12" cy="14" r="2" fill="#111"/><circle cx="17" cy="19" r="2" fill="#111"/></g><g transform="rotate(14 32 15)"><rect x="22" y="5" width="20" height="20" rx="4" fill="#fff"/><circle cx="27" cy="10" r="2" fill="#c1121f"/><circle cx="37" cy="10" r="2" fill="#c1121f"/><circle cx="27" cy="20" r="2" fill="#c1121f"/><circle cx="37" cy="20" r="2" fill="#c1121f"/></g></svg>`,
+  house: `<svg class="owned-flag" viewBox="0 0 20 20"><path d="M2 10 10 3l8 7v8H2Z" fill="#34d399" stroke="#052e16" stroke-width="1.5"/></svg>`
+};
+
+function fmt(v) { return (+v).toFixed(2).replace(/\.?0+$/, ""); }
+function setColor(s) {
+  const keys = Object.keys(SET_TILES).sort();
+  const k = keys.indexOf(s);
+  return SET_COLORS[(k < 0 ? 0 : k) % SET_COLORS.length];
+}
+
+function tileInner(t) {
+  switch (t.type) {
+    case "GO": return `${ICONS.go}<div class="val">GO</div><div class="sub">lap ×${fmt(CFG.lapBonus)}</div>`;
+    case "MULT": return `<div class="val">×${fmt(t.value)}</div><div class="sub">boost</div>`;
+    case "PROPERTY": return `<div class="strip" style="background:${setColor(t.set)}">${t.set}</div>${ICONS.house}<div class="val sm">×${fmt(t.value)}</div><div class="sub">set ${t.set} · ×${fmt(CFG.setBonus[t.set] || 1)}</div>`;
+    case "CASHOUT": return `${ICONS.vault}<div class="lbl">CASH OUT</div>`;
+    case "TAX": return `<div class="bars"></div><div class="lbl">JAIL TAX</div><div class="val sm">×${fmt(t.value)}</div>`;
+    case "PORTAL": return `<div class="vortex"></div><div class="lbl">→ ${clampIdx(t.target)}</div>`;
+    case "CHANCE": return `<div class="q">?</div><div class="lbl">CHANCE</div>`;
+    case "TWO_DICE": return `${ICONS.dice2}<div class="lbl">2 DICE</div>`;
+    case "BUST": return `${ICONS.bomb}<div class="lbl">BUST</div>`;
+    case "JACKPOT": return `${ICONS.crown}<div class="lbl">JACKPOT</div><div class="val sm">×${fmt(t.value)}</div>`;
+  }
+  return `<div class="lbl">${t.type}</div>`;
+}
+
+// Position of tile i along the square loop (GO at bottom-right, moving left, then up, right, down).
+function tileXY(i) {
+  const k = N / 4, t = 100 / (k + 1), S = 100 - t, d = i * 4 * S / N;
+  let x, y;
+  if (d <= S) { x = S - d; y = S; }
+  else if (d <= 2 * S) { x = 0; y = S - (d - S); }
+  else if (d <= 3 * S) { x = d - 2 * S; y = 0; }
+  else { x = S; y = d - 3 * S; }
+  return {x, y, t};
+}
+
+function buildBoard() {
+  BOARD = CFG.tiles; N = BOARD.length;
+  SET_TILES = {};
+  BOARD.forEach((t, i) => { if (t.type === "PROPERTY") (SET_TILES[t.set] = SET_TILES[t.set] || []).push(i); });
+  tileEls.forEach(e => e.remove());
+  if (tokenEl) tokenEl.remove();
+  tileEls = BOARD.map((t, i) => {
+    const {x, y, t: size} = tileXY(i);
+    tilePct = size;
+    const el = document.createElement("div");
+    el.className = `tile t-${t.type}`;
+    el.style.cssText = `left:${x}%;top:${y}%;width:${size}%;height:${size}%`;
+    el.innerHTML = `<div class="tin">${tileInner(t)}</div><span class="idx">${i}</span>`;
+    el.title = describeTile(t, i);
+    el.addEventListener("click", () => selectTile(i));
+    boardEl.appendChild(el);
+    return el;
+  });
+  const c = $("center");
+  c.style.cssText = `left:${tilePct}%;top:${tilePct}%;right:${tilePct}%;bottom:${tilePct}%`;
+  tokenEl = document.createElement("div");
+  tokenEl.className = "token";
+  boardEl.appendChild(tokenEl);
+  boardEl.style.setProperty("--tpct", tilePct + "%");
+  resize();
+  placeToken(round ? round.pos : 0);
+  if (selected !== null && selected < N) tileEls[selected].classList.add("sel"); else selected = null;
+  updateRisk();
+}
+
+function describeTile(t, i) {
+  const map = {GO:`Lap bonus ×${CFG.lapBonus}`, MULT:`Multiply by ${t.value}`, PROPERTY:`Set ${t.set}: ×${t.value}, complete set ×${CFG.setBonus[t.set] || 1}`,
+    CASHOUT:"You may cash out here", TAX:`Jail tax ×${t.value}`, PORTAL:`Teleport to tile ${clampIdx(t.target)}`, CHANCE:"Draw a chance card",
+    TWO_DICE:"Next roll uses two dice", BUST:"Lose everything", JACKPOT:`×${t.value} and auto cash-out`};
+  return `#${i} ${t.type}: ${map[t.type] || ""}`;
+}
+
+function resize() {
+  boardEl.style.setProperty("--tp", (boardEl.clientWidth * tilePct / 100) + "px");
+}
+window.addEventListener("resize", resize);
+
+function tileCenter(i) { const {x, y, t} = tileXY(i); return {x: x + t / 2, y: y + t / 2}; }
+function placeToken(i) { const c = tileCenter(i); tokenEl.style.left = c.x + "%"; tokenEl.style.top = c.y + "%"; }
+function hop() { tokenEl.classList.remove("hop"); void tokenEl.offsetWidth; tokenEl.classList.add("hop"); }
+
+/* ---------- dice ---------- */
+const PIPS = {1:[5], 2:[1,9], 3:[1,5,9], 4:[1,3,7,9], 5:[1,3,5,7,9], 6:[1,3,4,6,7,9]};
+const FACE_ROT = {1:[0,0], 2:[90,0], 3:[0,-90], 4:[0,90], 5:[-90,0], 6:[0,180]};
+const FACE_TF = {1:"rotateY(0deg)", 6:"rotateY(180deg)", 3:"rotateY(90deg)", 4:"rotateY(-90deg)", 5:"rotateX(90deg)", 2:"rotateX(-90deg)"};
+let dice = [];
+
+function makeDie(red) {
+  const wrap = document.createElement("div");
+  wrap.className = "die-wrap";
+  const die = document.createElement("div");
+  die.className = "die";
+  for (let v = 1; v <= 6; v++) {
+    const f = document.createElement("div");
+    f.className = "face" + (red ? " red" : "");
+    f.style.transform = `${FACE_TF[v]} translateZ(calc(var(--ds) / 2))`;
+    f.innerHTML = PIPS[v].map(p => `<span class="pip" style="grid-row:${Math.ceil(p / 3)};grid-column:${(p - 1) % 3 + 1}"></span>`).join("");
+    die.appendChild(f);
+  }
+  wrap.appendChild(die);
+  return {wrap, die, sx:0, sy:0};
+}
+
+function showDice(n) {
+  if (dice.length === n) return;
+  const row = $("diceRow"); row.innerHTML = ""; dice = [];
+  for (let i = 0; i < n; i++) { const d = makeDie(i === 1); row.appendChild(d.wrap); dice.push(d); }
+}
+
+async function rollDiceAnim(vals) {
+  showDice(vals.length);
+  vals.forEach((v, i) => {
+    const d = dice[i];
+    d.sx += 360 * (2 + Math.floor(Math.random() * 2));
+    d.sy += 360 * (2 + Math.floor(Math.random() * 2));
+    const [rx, ry] = FACE_ROT[v];
+    d.die.style.transform = `rotateX(${d.sx + rx}deg) rotateY(${d.sy + ry}deg)`;
+  });
+  await sleep(1050);
+}
+
+/* ---------- effects ---------- */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function floatText(i, text, color) {
+  const c = tileCenter(i), el = document.createElement("div");
+  el.className = "float"; el.textContent = text; el.style.color = color;
+  el.style.left = c.x + "%"; el.style.top = c.y + "%";
+  boardEl.appendChild(el); setTimeout(() => el.remove(), 1200);
+}
+
+function burst(i, colors, count, spread) {
+  const c = i === null ? {x:50, y:50} : tileCenter(i);
+  for (let k = 0; k < count; k++) {
+    const p = document.createElement("div");
+    p.className = "particle";
+    const a = Math.random() * Math.PI * 2, r = spread * (0.4 + Math.random() * 0.8);
+    p.style.cssText = `left:${c.x}%;top:${c.y}%;background:${colors[k % colors.length]};--dx:${Math.cos(a) * r}px;--dy:${Math.sin(a) * r}px;--rot:${Math.random() * 720}deg;--dur:${0.7 + Math.random() * 0.6}s`;
+    if (Math.random() < .4) p.style.borderRadius = "50%";
+    boardEl.appendChild(p); setTimeout(() => p.remove(), 1400);
+  }
+}
+
+function flash(color) {
+  const f = document.createElement("div");
+  f.className = "flash"; f.style.background = color;
+  boardEl.appendChild(f); setTimeout(() => f.remove(), 650);
+}
+
+function overlay(cls, html, ms) {
+  const o = $("overlay");
+  o.className = "overlay show " + cls; o.innerHTML = html;
+  return new Promise(res => {
+    const done = () => { o.className = "overlay"; o.onclick = null; res(); };
+    o.onclick = done;
+    if (ms) setTimeout(done, ms);
+  });
+}
+
+function setStatus(text, tone) { const s = $("status"); s.textContent = text; s.className = "status " + (tone || ""); }
+
+/* =====================================================================
+   GAME FLOW
+   ===================================================================== */
+let balance = 1000, round = null, busy = false, dispMult = 1, betAmt = 10, selected = null;
+
+function money(v) { return "$" + v.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+function updateHUD(pop, down) {
+  const m = $("multi");
+  m.textContent = dispMult.toFixed(2) + "x";
+  m.classList.toggle("down", !!down);
+  if (pop) { m.classList.remove("pop"); void m.offsetWidth; m.classList.add("pop"); }
+  $("pot").textContent = money(round ? Math.min(dispMult, CFG.maxWin) * betAmt : 0);
+  $("balance").textContent = money(balance);
+}
+
+function updateButtons() {
+  const rb = $("rollBtn"), cb = $("cashBtn");
+  rb.disabled = busy;
+  rb.textContent = round ? (round.twoDice ? "ROLL 2 DICE" : "ROLL") : `START · ${money(betAmt)}`;
+  const canCash = !!round && !busy && BOARD[round.pos].type === "CASHOUT";
+  cb.disabled = !canCash;
+  cb.classList.toggle("ready", canCash);
+  $("bet").disabled = !!round;
+}
+
+function updateRisk() {
+  tileEls.forEach(e => { e.classList.remove("reach", "danger", "goal"); const p = e.querySelector(".prob"); if (p) p.remove(); });
+  if (busy) return;
+  const pos = round ? round.pos : 0, two = round ? round.twoDice : false;
+  const o = nextRollOdds(pos, two);
+  const pct = v => (v * 100).toFixed(v > 0 && v < .1 ? 1 : 0) + "%";
+  $("rBust").style.width = o.bust * 100 + "%"; $("rBustT").textContent = pct(o.bust);
+  $("rJack").style.width = o.jack * 100 + "%"; $("rJackT").textContent = pct(o.jack);
+  $("rCash").style.width = o.cash * 100 + "%"; $("rCashT").textContent = pct(o.cash);
+  for (const [i, r] of Object.entries(o.reach)) {
+    const el = tileEls[i];
+    el.classList.add("reach");
+    if (r.kind === "BUST") el.classList.add("danger");
+    if (r.kind === "JACKPOT") el.classList.add("goal");
+    const b = document.createElement("span"); b.className = "prob"; b.textContent = Math.round(r.p * 100) + "%";
+    el.appendChild(b);
+  }
+}
+
+function log(html) {
+  const l = $("log"), d = document.createElement("div");
+  d.innerHTML = html; l.prepend(d);
+  while (l.children.length > 60) l.lastChild.remove();
+}
+
+function addHistory(text, cls) {
+  const h = $("history");
+  if (h.querySelector(".hint")) h.innerHTML = "";
+  const c = document.createElement("span"); c.className = "chip " + cls; c.textContent = text;
+  h.prepend(c);
+  while (h.children.length > 18) h.lastChild.remove();
+}
+
+function startRound() {
+  betAmt = Math.max(1, Math.floor(+$("bet").value || 1));
+  $("bet").value = betAmt;
+  if (betAmt > balance) { setStatus("Not enough balance for this bet", "bad"); return false; }
+  balance -= betAmt;
+  round = newRound(); dispMult = 1;
+  tileEls.forEach(e => e.classList.remove("owned"));
+  placeToken(0); showDice(1);
+  updateHUD(); log(`New round · bet <b>${money(betAmt)}</b>`);
+  return true;
+}
+
+async function doRoll() {
+  if (busy) return;
+  if (!round && !startRound()) return;
+  busy = true; updateButtons(); updateRisk();
+  const two = round.twoDice;
+  const vals = two ? [d6(), d6()] : [d6()];
+  setStatus(two ? "Rolling two dice…" : "Rolling…");
+  await rollDiceAnim(vals);
+  const steps = vals.reduce((a, b) => a + b, 0);
+  const start = round.pos;
+  const events = engineStep(round, steps);
+  const lap = events.find(e => e.t === "lap");
+  setStatus(`Rolled ${vals.join(" + ")}${two ? " = " + steps : ""}`);
+
+  for (let s = 1; s <= steps; s++) {
+    const p = (start + s) % N;
+    placeToken(p); hop();
+    if (p === 0 && lap) { dispMult *= lap.factor; floatText(0, `LAP ×${fmt(lap.factor)}`, "#ffd24a"); updateHUD(true); }
+    await sleep(s === steps ? 240 : 140);
+  }
+
+  let parts = [];
+  for (const ev of events) {
+    await playEvent(ev);
+    if (ev.factor && ev.t !== "lap") parts.push(`${ev.t} ×${fmt(ev.factor)}`);
+  }
+  log(`Rolled <b>${vals.join("+")}</b> → tile ${round ? round.pos : "-"} ${parts.length ? "· " + parts.join(", ") : ""}`);
+
+  busy = false;
+  if (round) { dispMult = round.mult; updateHUD(); }
+  updateButtons(); updateRisk();
+}
+
+async function playEvent(ev) {
+  switch (ev.t) {
+    case "portal":
+      tileEls[ev.from].classList.add("warp");
+      floatText(ev.from, "WARP!", "#b3ff4d");
+      tokenEl.classList.add("warp-out");
+      await sleep(460);
+      tileEls[ev.from].classList.remove("warp");
+      tileEls[ev.to].classList.add("warp");
+      placeToken(ev.to);
+      tokenEl.classList.remove("warp-out"); tokenEl.classList.add("warp-in");
+      burst(ev.to, ["#b3ff4d", "#3ddc4a", "#eaffb0"], 18, 60);
+      await sleep(460);
+      tokenEl.classList.remove("warp-in"); tileEls[ev.to].classList.remove("warp");
+      break;
+    case "mult":
+      dispMult *= ev.factor; updateHUD(true);
+      floatText(ev.pos, `×${fmt(ev.factor)}`, "#2dd4bf");
+      burst(ev.pos, ["#2dd4bf", "#99f6e4"], 10, 40);
+      await sleep(380);
+      break;
+    case "prop":
+      dispMult *= ev.factor; updateHUD(true);
+      tileEls[ev.pos].classList.add("owned");
+      floatText(ev.pos, `×${fmt(ev.factor)}`, "#f9a8d4");
+      await sleep(380);
+      break;
+    case "set":
+      dispMult *= ev.factor; updateHUD(true);
+      (SET_TILES[ev.set] || []).forEach(i => burst(i, [setColor(ev.set), "#fff"], 16, 70));
+      setStatus(`SET ${ev.set} COMPLETE! ×${fmt(ev.factor)}`, "warn");
+      await sleep(900);
+      break;
+    case "tax": {
+      const el = tileEls[ev.pos];
+      el.classList.remove("jailed"); void el.offsetWidth; el.classList.add("jailed");
+      dispMult *= ev.factor; updateHUD(false, true);
+      flash("rgba(156,163,175,.45)");
+      floatText(ev.pos, `JAIL TAX ×${fmt(ev.factor)}`, "#e5e7eb");
+      setStatus("Busted by the warden! Multiplier taxed.", "bad");
+      await sleep(800);
+      updateHUD();
+      break;
+    }
+    case "chance":
+      await overlay("", `<div class="card"><span>CHANCE</span><b>×${fmt(ev.factor)}</b><span>${ev.factor > 1 ? "Lucky break!" : ev.factor < 1 ? "Ouch…" : "Nothing happens"}</span></div>`, 1300);
+      dispMult *= ev.factor; updateHUD(ev.factor >= 1, ev.factor < 1);
+      break;
+    case "twodice":
+      showDice(2);
+      burst(ev.pos, ["#60a5fa", "#fff"], 14, 50);
+      setStatus("Next roll uses TWO dice!", "warn");
+      await sleep(600);
+      break;
+    case "cashoutAvail":
+      setStatus("Safe house! Cash out or keep rolling.", "good");
+      break;
+    case "bust":
+      burst(ev.pos, ["#ff4d6d", "#ffb703", "#fb5607", "#222"], 46, 130);
+      flash("rgba(244,63,94,.55)");
+      boardEl.classList.remove("shake"); void boardEl.offsetWidth; boardEl.classList.add("shake");
+      dispMult = 0; updateHUD(false, true);
+      await overlay("bust", `<h2>BUSTED</h2><p>Lost ${money(betAmt)}</p>`, 1600);
+      endRound(0, "bust");
+      break;
+    case "jackpot":
+      dispMult *= ev.factor; updateHUD(true);
+      for (let k = 0; k < 4; k++) setTimeout(() => burst(null, ["#ffd24a", "#fff3b0", "#f43f5e", "#34d399", "#60a5fa"], 40, 260), k * 250);
+      await overlay("jack", `<h2>JACKPOT!</h2><p>${Math.min(round.mult, CFG.maxWin).toFixed(2)}x · won ${money(Math.min(round.mult, CFG.maxWin) * betAmt)}</p>`, 2600);
+      endRound(Math.min(round.mult, CFG.maxWin) * betAmt, "jackpot");
+      break;
+    case "maxwin":
+      burst(null, ["#ffd24a", "#fff"], 60, 260);
+      await overlay("jack", `<h2>MAX WIN</h2><p>${money(CFG.maxWin * betAmt)}</p>`, 2200);
+      endRound(CFG.maxWin * betAmt, "maxwin");
+      break;
+  }
+}
+
+async function cashOut() {
+  if (!round || busy || BOARD[round.pos].type !== "CASHOUT") return;
+  busy = true; updateButtons();
+  const m = Math.min(round.mult, CFG.maxWin), win = m * betAmt;
+  burst(round.pos, ["#34d399", "#ffd24a", "#bbf7d0"], 36, 120);
+  await overlay("win", `<h2>CASHED OUT</h2><p>${m.toFixed(2)}x · won ${money(win)}</p>`, 1700);
+  endRound(win, "cashout");
+  busy = false; updateButtons(); updateRisk();
+}
+
+function endRound(payout, kind) {
+  const m = round ? Math.min(round.mult, CFG.maxWin) : 0;
+  balance += payout;
+  if (kind === "bust") addHistory("BUST", "l");
+  else addHistory(m.toFixed(2) + "x", kind === "jackpot" || kind === "maxwin" ? "j" : "w");
+  log(kind === "bust" ? `<b style="color:var(--red)">Bust</b> after ${round.rolls} rolls`
+                      : `<b style="color:var(--green)">${kind}</b> ${m.toFixed(2)}x → ${money(payout)}`);
+  round = null; dispMult = 1;
+  updateHUD(); showDice(1);
+  setStatus(`Round over · press START to play again`, kind === "bust" ? "bad" : "good");
+}
+
+/* =====================================================================
+   EDITOR: tile inspector + JSON
+   ===================================================================== */
+function selectTile(i) {
+  tileEls.forEach(e => e.classList.remove("sel"));
+  selected = i; tileEls[i].classList.add("sel");
+  renderInspector();
+}
+
+function renderInspector() {
+  const body = $("inspBody");
+  if (selected === null) { body.innerHTML = `<span class="hint">Click a tile on the board to edit, insert or delete it.</span>`; return; }
+  const t = BOARD[selected];
+  const fields = (TYPE_FIELDS[t.type] || []).map(f => {
+    const val = t[f] ?? TYPE_DEFAULTS[t.type][f];
+    const inputType = f === "set" ? "text" : "number";
+    return `<label class="f">${f} <input data-f="${f}" type="${inputType}" step="${f === "target" ? 1 : 0.05}" value="${val}"></label>`;
+  }).join("");
+  body.innerHTML = `
+    <div class="hint">Tile #${selected} of ${N}${round ? " · finish the round to edit" : ""}</div>
+    <label class="f">type <select id="inspType">${TYPES.map(x => `<option ${x === t.type ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+    <div id="inspFields">${fields}</div>
+    <div class="row">
+      <button class="sbtn" id="inspSave">Save</button>
+      <button class="sbtn" id="inspBefore">Insert before</button>
+      <button class="sbtn" id="inspAfter">Insert after</button>
+      <button class="sbtn danger" id="inspDel">Delete</button>
+    </div>`;
+  $("inspType").onchange = e => {
+    if (round) return renderInspector();
+    const type = e.target.value;
+    CFG.tiles[selected] = Object.assign({type}, JSON.parse(JSON.stringify(TYPE_DEFAULTS[type] || {})));
+    commit();
+  };
+  $("inspSave").onclick = () => {
+    if (round) return;
+    const tile = {type: $("inspType").value};
+    body.querySelectorAll("[data-f]").forEach(inp => {
+      tile[inp.dataset.f] = inp.dataset.f === "set" ? (inp.value.trim().toUpperCase() || "A") : Number(inp.value);
+    });
+    if (tile.type === "PROPERTY" && CFG.setBonus[tile.set] === undefined) CFG.setBonus[tile.set] = 2;
+    CFG.tiles[selected] = tile; commit();
+  };
+  $("inspBefore").onclick = () => insertTile(selected);
+  $("inspAfter").onclick = () => insertTile(selected + 1);
+  $("inspDel").onclick = () => deleteTile(selected);
+}
+
+function insertTile(at) {
+  if (round) return;
+  CFG.tiles.forEach(t => { if (t.type === "PORTAL" && t.target >= at) t.target++; });
+  CFG.tiles.splice(at, 0, {type:"MULT", value:1.1});
+  selected = at; commit();
+}
+
+function deleteTile(at) {
+  if (round || CFG.tiles.length <= 8) { if (CFG.tiles.length <= 8) setStatus("Board needs at least 8 tiles", "bad"); return; }
+  CFG.tiles.splice(at, 1);
+  CFG.tiles.forEach(t => { if (t.type === "PORTAL" && t.target > at) t.target--; });
+  selected = Math.min(at, CFG.tiles.length - 1); commit();
+}
+
+function commit() {
+  buildBoard(); syncJson(); renderInspector(); updateButtons();
+}
+
+function syncJson() {
+  const t = CFG.tiles.map((x, i) => "    " + JSON.stringify(x) + (i < CFG.tiles.length - 1 ? "," : "") + "   // " + i).join("\n");
+  $("json").value = `{\n  "lapBonus": ${CFG.lapBonus},\n  "setBonus": ${JSON.stringify(CFG.setBonus)},\n  "chanceDeck": ${JSON.stringify(CFG.chanceDeck)},\n  "maxWin": ${CFG.maxWin},\n  "tiles": [\n${t}\n  ]\n}`;
+}
+
+function applyJson() {
+  if (round) { $("jsonErr").textContent = "Finish the current round first."; return; }
+  try {
+    const txt = $("json").value.replace(/\/\/[^\n]*/g, "");
+    const c = JSON.parse(txt);
+    if (!Array.isArray(c.tiles) || c.tiles.length < 8) throw new Error("tiles must be an array of at least 8 tiles");
+    c.tiles.forEach((t, i) => {
+      if (!TYPES.includes(t.type)) throw new Error(`tile ${i}: unknown type "${t.type}"`);
+      for (const f of TYPE_FIELDS[t.type] || []) if (t[f] === undefined) throw new Error(`tile ${i} (${t.type}) needs "${f}"`);
+    });
+    c.lapBonus = +c.lapBonus || 1; c.setBonus = c.setBonus || {}; c.maxWin = +c.maxWin || 10000;
+    if (!Array.isArray(c.chanceDeck) || !c.chanceDeck.length) c.chanceDeck = [[1, 1]];
+    CFG = c; selected = null; $("jsonErr").textContent = "";
+    commit();
+  } catch (e) { $("jsonErr").textContent = "Error: " + e.message; }
+}
+
+function copyPython() {
+  const lines = CFG.tiles.map((t, i) => "    " + JSON.stringify(t).replace(/,"/g, ', "').replace(/":/g, '": ') + ",   # " + i).join("\n");
+  const py = `BOARD = [\n${lines}\n]\n\nLAP_BONUS = ${CFG.lapBonus}\nSET_BONUS = ${JSON.stringify(CFG.setBonus)}\nCHANCE_DECK = [${CFG.chanceDeck.map(c => `(${c[0]}, ${c[1]})`).join(", ")}]\nMAX_WIN = ${CFG.maxWin}\n`;
+  const done = () => { $("jsonErr").style.color = "var(--green)"; $("jsonErr").textContent = "Python config copied to clipboard."; setTimeout(() => { $("jsonErr").textContent = ""; $("jsonErr").style.color = ""; }, 2500); };
+  if (navigator.clipboard) navigator.clipboard.writeText(py).then(done, () => { $("json").value = py; $("jsonErr").textContent = "Clipboard blocked: Python config shown in the box (Apply is disabled for it)."; });
+  else { $("json").value = py; }
+}
+
+/* ---------- simulator UI ---------- */
+function runSim() {
+  const rounds = Math.max(1000, Math.floor(+$("simRounds").value || 100000));
+  const strat = $("simStrat").value, target = +$("simTarget").value || 10;
+  $("simRes").innerHTML = "Running…";
+  setTimeout(() => {
+    const list = strat === "all"
+      ? [["Never cash out", "never"], ["First cash-out", "first"], [`Cash out ≥ ${target}x`, "target"]]
+      : [[$("simStrat").selectedOptions[0].text, strat]];
+    $("simRes").innerHTML = list.map(([name, s]) => {
+      const r = simulate(rounds, s, target);
+      return `<div><b>${name}</b><br>RTP <b>${(r.rtp * 100).toFixed(2)}%</b> · bust ${(r.bust * 100).toFixed(1)}% · jackpot ${(r.jack * 100).toFixed(2)}% · cash-out ${(r.cash * 100).toFixed(1)}% · avg rolls ${r.rolls.toFixed(2)} · max ${r.maxP.toFixed(1)}x</div>`;
+    }).join("<hr style='border:0;border-top:1px solid var(--line)'>") + `<div class="hint">${rounds.toLocaleString()} rounds each · heavy-tailed, use 1M+ for precise RTP</div>`;
+  }, 30);
+}
+
+/* ---------- wiring ---------- */
+$("rollBtn").onclick = doRoll;
+$("cashBtn").onclick = cashOut;
+$("betUp").onclick = () => { if (!round) { $("bet").value = Math.floor(+$("bet").value || 0) + 5; betAmt = +$("bet").value; updateButtons(); } };
+$("betDown").onclick = () => { if (!round) { $("bet").value = Math.max(1, Math.floor(+$("bet").value || 0) - 5); betAmt = +$("bet").value; updateButtons(); } };
+$("bet").oninput = () => { betAmt = Math.max(1, Math.floor(+$("bet").value || 1)); updateButtons(); };
+$("applyJson").onclick = applyJson;
+$("resetJson").onclick = () => { if (round) return; CFG = JSON.parse(JSON.stringify(DEFAULT_CONFIG)); selected = null; commit(); };
+$("copyPy").onclick = copyPython;
+$("simBtn").onclick = runSim;
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input,textarea,select")) return;
+  if (e.code === "Space") { e.preventDefault(); doRoll(); }
+  if (e.key === "c" || e.key === "C") cashOut();
+});
+
+CFG = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+buildBoard(); syncJson(); showDice(1); updateHUD(); updateButtons();
+</script>
+</body>
+</html>
